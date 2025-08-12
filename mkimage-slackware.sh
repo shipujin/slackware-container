@@ -7,6 +7,7 @@ if [ -z "$ARCH" ]; then
   case "$( uname -m )" in
     i?86) ARCH="" ;;
     arm*) ARCH=arm ;;
+    loongarch64) ARCH=loong64 ;;
        *) ARCH=64 ;;
   esac
 fi
@@ -15,16 +16,14 @@ BUILD_NAME=${BUILD_NAME:-"slackware"}
 VERSION=${VERSION:="current"}
 RELEASENAME=${RELEASENAME:-"slackware${ARCH}"}
 RELEASE=${RELEASE:-"${RELEASENAME}-${VERSION}"}
-MIRROR=${MIRROR:-"http://slackware.osuosl.org"}
+MIRROR=${MIRROR:-"http://mirrors.nju.edu.cn/slackwareloong"}
 CACHEFS=${CACHEFS:-"/tmp/${BUILD_NAME}/${RELEASE}"}
 ROOTFS=${ROOTFS:-"/tmp/rootfs-${RELEASE}"}
 CWD=$(pwd)
 
 base_pkgs="a/aaa_base \
-	a/aaa_elflibs \
 	a/aaa_libraries \
 	a/coreutils \
-	a/glibc-solibs \
 	a/aaa_glibc-solibs \
 	a/aaa_terminfo \
 	a/pam \
@@ -76,14 +75,18 @@ base_pkgs="a/aaa_base \
 	n/net-tools \
 	a/findutils \
 	n/iproute2 \
-	n/openssl"
+	l/zlib \
+	l/libsodium \
+	d/ruby \
+	ap/vim \
+	n/openssl" 
 
 function cacheit() {
 	file=$1
 	if [ ! -f "${CACHEFS}/${file}"  ] ; then
 		mkdir -p $(dirname ${CACHEFS}/${file})
-		echo "Fetching ${MIRROR}/${RELEASE}/${file}" >&2
-		curl -s -o "${CACHEFS}/${file}" "${MIRROR}/${RELEASE}/${file}"
+		echo "Fetching ${MIRROR}/${RELEASE}/slackware64/${file}" 
+		curl -s -o "${CACHEFS}/${file}" "${MIRROR}/${RELEASE}/slackware64/${file}"
 	fi
 	echo "/cdrom/${file}"
 }
@@ -105,7 +108,9 @@ fi
 if stat -c %F $ROOTFS/cdrom | grep -q "symbolic link" ; then
 	rm $ROOTFS/cdrom
 fi
-mkdir -p $ROOTFS/{mnt,cdrom,dev,proc,sys}
+#mkdir -p $ROOTFS/{mnt,cdrom,dev,proc,sys}
+rm -rf $ROOTFS/cdrom
+mkdir -p $ROOTFS/cdrom
 
 for dir in cdrom dev sys proc ; do
 	if mount | grep -q $ROOTFS/$dir  ; then
@@ -147,25 +152,37 @@ fi
 if [ ! -f ${CACHEFS}/paths-extra ] ; then
 	bash ${CWD}/get_paths.sh -r ${RELEASE} -m ${MIRROR} -e > ${CACHEFS}/paths-extra
 fi
+if [ ! -f ${CACHEFS}/paths-slackware64 ] ; then
+	bash ${CWD}/get_paths.sh -r ${RELEASE} > ${CACHEFS}/paths-slackware64
+fi
 for pkg in ${base_pkgs}
 do
-	path=$(grep "^packages/$(basename "${pkg}")-" ${CACHEFS}/paths-patches | cut -d : -f 1)
-	if [ ${#path} -eq 0 ] ; then
-		path=$(grep ^${pkg}- ${CACHEFS}/paths | cut -d : -f 1)
-		if [ ${#path} -eq 0 ] ; then
-			path=$(grep "^$(basename "${pkg}")/$(basename "${pkg}")-" ${CACHEFS}/paths-extra | cut -d : -f 1)
-			if [ ${#path} -eq 0 ] ; then
-				echo "$pkg not found"
-				continue
-			else
-				l_pkg=$(cacheit extra/$path)
-			fi
-		else
-			l_pkg=$(cacheit $relbase/$path)
-		fi
-	else
-		l_pkg=$(cacheit patches/$path)
-	fi
+	#path=$(grep "^packages/$(basename "${pkg}")-" ${CACHEFS}/paths-slackware64 | cut -d : -f 1)
+	#path=$(grep "^slackware64/$(basename "${pkg}")-" ${CACHEFS}/paths-slackware64 | cut -d : -f 1)
+	path=$(grep "^slackware64/"${pkg}"-" ${CACHEFS}/paths-slackware64 | cut -d : -f 1)
+	echo "========================================================================"
+	echo "pkg= $pkg"
+	echo "CACHEFS= $CACHEFS"
+	echo "path= $path"
+	echo "========================================================================"
+	l_pkg=$(cacheit $path)
+#	if [ ${#path} -eq 0 ] ; then
+#		path=$(grep ^${pkg}- ${CACHEFS}/paths | cut -d : -f 1)
+#		if [ ${#path} -eq 0 ] ; then
+#			path=$(grep "^$(basename "${pkg}")/$(basename "${pkg}")-" ${CACHEFS}/paths-extra | cut -d : -f 1)
+#			if [ ${#path} -eq 0 ] ; then
+#				echo "$pkg not found"
+#				continue
+#			else
+#				l_pkg=$(cacheit extra/$path)
+#			fi
+#		else
+#			l_pkg=$(cacheit $relbase/$path)
+#		fi
+#	else
+#		l_pkg=$(cacheit slackware64/$path)
+#		l_pkg=$(cacheit $path)
+#	fi
 	if [ -e ./sbin/upgradepkg ] ; then
 		echo PATH=/bin:/sbin:/usr/bin:/usr/sbin \
 		ROOT=/mnt \
@@ -188,16 +205,16 @@ cd mnt
 PATH=/bin:/sbin:/usr/bin:/usr/sbin \
 chroot . /bin/sh -c '/sbin/ldconfig'
 
-# slackpkg would normally do this on first invocation
-if [ ! -e ./root/.gnupg ] ; then
-	cacheit "GPG-KEY"
-	cp ${CACHEFS}/GPG-KEY .
-	echo PATH=/bin:/sbin:/usr/bin:/usr/sbin \
-	chroot . /usr/bin/gpg --import GPG-KEY
-	PATH=/bin:/sbin:/usr/bin:/usr/sbin \
-	chroot . /usr/bin/gpg --import GPG-KEY
-	rm GPG-KEY
-fi
+## slackpkg would normally do this on first invocation
+#if [ ! -e ./root/.gnupg ] ; then
+#	cacheit "GPG-KEY"
+#	cp ${CACHEFS}/GPG-KEY .
+#	echo PATH=/bin:/sbin:/usr/bin:/usr/sbin \
+#	chroot . /usr/bin/gpg --import GPG-KEY
+#	PATH=/bin:/sbin:/usr/bin:/usr/sbin \
+#	chroot . /usr/bin/gpg --import GPG-KEY
+#	rm GPG-KEY
+#fi
 
 set -x
 echo "export TERM=linux" >> etc/profile.d/term.sh
@@ -223,11 +240,14 @@ EOF
 	chmod +x etc/rc.d/rc.local
 fi
 
+# set network
+echo "nameserver 114.114.114.114"  >> etc/resolv.conf
+
 # now some cleanup of the minimal image
 set +x
 rm -rf usr/share/locale/*
 rm -rf usr/man/*
-find usr/share/terminfo/ -type f ! -name 'linux' -a ! -name 'xterm' -a ! -name 'screen.linux' -exec rm -f "{}" \;
+#find usr/share/terminfo/ -type f ! -name 'linux' -a ! -name 'xterm' -a ! -name 'screen.linux' -exec rm -f "{}" \;
 umount $ROOTFS/dev
 rm -f dev/* # containers should expect the kernel API (`mount -t devtmpfs none /dev`)
 

@@ -1,4 +1,6 @@
 #!/bin/bash
+set -e
+set -x
 
 # _is_sourced tests whether this script is being source, or executed directly
 _is_sourced() {
@@ -21,7 +23,7 @@ _fetch_file_list() {
     local directory="${3}"
     local ret
 
-    curl -sSL "${mirror}/${release}/${directory}/FILE_LIST"
+    curl -sSL "${mirror}/${release}/${directory}/FILELIST.TXT"
     ret=$?
     if [ $ret -ne 0 ] ; then
         return $ret
@@ -57,8 +59,8 @@ main() {
     local tmp_file_list
     local ret
 
-    mirror="${MIRROR:-http://slackware.osuosl.org}"
-    release="${RELEASE:-slackware64-current}"
+    mirror="${MIRROR:-http://mirrors.nju.edu.cn/slackwareloong}"
+    release="${RELEASE:-slackwareloong64-current}"
 
     while getopts ":hm:r:tpe" opts ; do
         case "${opts}" in
@@ -86,18 +88,18 @@ main() {
     shift $((OPTIND-1))
     
     tmp_dir="$(mktemp -d)"
-    tmp_file_list="${tmp_dir}/FILE_LIST"
+    tmp_file_list="${tmp_dir}/FILELIST.TXT"
     if [ -n "${fetch_patches}" ] ; then
         _fetch_file_list "${mirror}" "${release}" "patches" >> "${tmp_file_list}"
     elif [ -n "${fetch_extra}" ] ; then
         _fetch_file_list "${mirror}" "${release}" "extra" >> "${tmp_file_list}"
     else
-        _fetch_file_list "${mirror}" "${release}" "$(_release_base "${release}")" > "${tmp_file_list}"
+        _fetch_file_list "${mirror}" "${release}" > "${tmp_file_list}"
     fi
 
     ret=$?
     if [ $ret -ne 0 ] ; then
-        echo "ERROR fetching FILE_LIST" >&2
+        echo "ERROR fetching FILELIST.TXT" >&2
         exit $ret
     fi
 
